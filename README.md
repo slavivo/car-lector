@@ -13,12 +13,12 @@ Aplikace umožňuje uživateli nahrávat dotazy prostřednictvím textu nebo zvu
 
 1. Naklonujte repozitář:
 
-Buďto přes příkazovou řádku:
+Buďto stáhněte zip soubor repozitáře a rozbalte ho.
+Nebo přes příkazovou řádku:
 ```bash
-git clone
+git clone https://github.com/slavivo/car-lector.git
 cd autoskola-assistant
 ```
-Nebo stáhněte zip soubor repozitáře a rozbalte ho.
 
 2. Nainstalujte požadované závislosti:
 
