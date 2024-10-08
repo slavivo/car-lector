@@ -1,134 +1,183 @@
-import configparser
-import logging
-import openai
 import asyncio
+import websockets
+import json
 import pyaudio
-import wave
+import configparser
+import base64
+import logging
+import argparse
 import tkinter as tk
-from tkinter import scrolledtext
-import tempfile  # Import the tempfile module
-from utils import (
-    chat_completion_request,
-    RequestParams,
-)
+from tkinter import ttk
+import threading
 
-# Logging setup
-logging.basicConfig(level=logging.INFO)
+# Set-up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Read configuration
 config = configparser.ConfigParser()
 config.read("config.ini")
 OPENAI_KEY = config["DEFAULT"]["OPENAI_KEY"]
 GPT_MODEL = config["DEFAULT"]["GPT_MODEL"]
+URL = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
 
-def record_audio(filename, duration=5, sample_rate=44100, chunk_size=1024):
-    audio_format = pyaudio.paInt16
-    channels = 1
-    chunk = chunk_size
-    record_seconds = duration
+headers = {
+    "Authorization": f"Bearer {OPENAI_KEY}",
+    "OpenAI-Beta": "realtime=v1",
+}    
 
-    audio = pyaudio.PyAudio()
+class AudioChatApp:
+    def __init__(self, master):
+        self.master = master
+        master.title("OpenAI Audio Chat")
 
-    stream = audio.open(format=audio_format, channels=channels,
-                        rate=sample_rate, input=True,
-                        frames_per_buffer=chunk)
+        self.is_recording = False
+        self.is_receiving = False
+        self.should_stop = False
 
-    print("Recording...")
+        style = ttk.Style()
+        style.configure('Big.TButton', font=('Helvetica', 14), padding=10)
 
-    frames = []
+        self.button = ttk.Button(master, text="Začít nahrávat", command=self.toggle_recording, style='Big.TButton')
+        self.button.pack(pady=20)
 
-    for _ in range(0, int(sample_rate / chunk * record_seconds)):
-        data = stream.read(chunk)
-        frames.append(data)
+        self.status_label = ttk.Label(master, text="Připraveno", font=('Helvetica', 12))
+        self.status_label.pack(pady=10)
 
-    print("Finished recording.")
+        self.p = pyaudio.PyAudio()
+        self.frames = []
+        self.audio_queue = asyncio.Queue()
 
-    stream.stop_stream()
-    stream.close()
-    audio.terminate()
+    def toggle_recording(self):
+        if not self.is_recording and not self.is_receiving:
+            self.is_recording = True
+            self.button.config(text="Přestat nahrávat")
+            self.status_label.config(text="Nahrávání...")
+            threading.Thread(target=self.record_audio, daemon=True).start()
+        elif self.is_recording:
+            self.is_recording = False
+            self.button.config(text="Začít nahrávat")
+            self.status_label.config(text="Zpracovávání...")
 
-    # Write audio frames to the temporary file
-    with wave.open(filename, 'wb') as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(audio.get_sample_size(audio_format))
-        wf.setframerate(sample_rate)
-        wf.writeframes(b''.join(frames))
+    def record_audio(self):
+        sample_rate = 24000
+        chunk_size = 1024
+        audio_format = pyaudio.paInt16
+        channels = 1
 
-async def transcribe_audio():
-    client = openai.AsyncClient(api_key=OPENAI_KEY)
+        logging.info("Started recording...")
+        stream = self.p.open(format=audio_format, channels=channels,
+                             rate=sample_rate, input=True,
+                             frames_per_buffer=chunk_size)
 
-    # Use tempfile to create a temporary audio file
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-        temp_filename = temp_audio.name
-        # Record audio into the temporary file
-        record_audio(temp_filename, duration=10)
+        self.frames = []
+        while self.is_recording:
+            data = stream.read(chunk_size)
+            self.frames.append(data)
+
+        logging.info("Stopped recording...")
+        stream.stop_stream()
+        stream.close()
+
+        audio_data = b''.join(self.frames)
+        asyncio.run_coroutine_threadsafe(self.audio_queue.put(audio_data), self.loop)
+
+    async def process_audio(self):
+        while True:
+            audio_data = await self.audio_queue.get()
+            await self.send_audio(audio_data)
+
+    async def send_audio(self, audio_data):
+        self.is_receiving = True
+        self.master.after(0, lambda: self.button.config(text="Nelze nahrávat", state=tk.DISABLED))
         
-        # After recording, open the temporary file for reading
-        with open(temp_filename, "rb") as file:
-            transcript = await client.audio.transcriptions.create(
-                model="whisper-1", file=file, language="cs"
-            )
+        base64_audio = base64.b64encode(audio_data).decode('utf-8')
 
-    return transcript.text
+        await self.ws.send(json.dumps({
+            "type": "input_audio_buffer.append",
+            "audio": base64_audio
+        }))
 
-async def generate_response(instructions, transcript):
-    client = openai.AsyncClient(api_key=OPENAI_KEY)
+        await self.ws.send(json.dumps({
+            "type": "input_audio_buffer.commit"
+        }))
 
-    messages = [
-        {"role": "system", "content": instructions},
-        {"role": "user", "content": transcript},
-    ]
+        await self.ws.send(json.dumps({
+            "type": "response.create"
+        }))
 
-    params = RequestParams(
-        client=client,
-        messages=messages,
-        max_tokens=3000,
-        temperature=0.5,
-        top_p=0.5,
-    )
+        stream = self.p.open(format=pyaudio.paInt16,
+                             channels=1,
+                             rate=22000,
+                             output=True)
 
-    response = await chat_completion_request(params)
-    return response.choices[0].message.content
+        try:
+            async for message in self.ws:
+                data = json.loads(message)
 
-def start_audio_recording():
-    input_text.delete("1.0", tk.END)
-    loop = asyncio.get_event_loop()
-    transcript = loop.run_until_complete(transcribe_audio())
-    input_text.insert(tk.END, transcript)
+                if 'type' in data and data['type'] == 'response.audio.delta':
+                    audio_delta = base64.b64decode(data['delta'])
+                    stream.write(audio_delta)
+                elif 'type' in data and data['type'] == 'response.audio.done':
+                    logging.info("Audio response complete.")
+                    break
+                else:
+                    logging.debug(f"Received message: {data}")
+        finally:
+            stream.stop_stream()
+            stream.close()
+            self.is_receiving = False
+            self.master.after(0, lambda: self.button.config(text="Začít nahrávat", state=tk.NORMAL))
+            self.master.after(0, lambda: self.status_label.config(text="Připraveno"))
 
-def generate_message():
-    instructions = """Jsi zkušený učitel autoškoly, který dokonale ovládá česká dopravní pravidla a zákony. Odpovídáš pouze na otázky, které ti žák klade, a soustředíš se na to, aby byly tvoje odpovědi vždy přesné a stručné. Vždy používáš aktuální česká dopravní pravidla. Pokud je třeba, vysvětluješ situace na konkrétních příkladech z reálného provozu. Nezabýváš se informacemi, které nejsou relevantní k otázce žáka."""
-    prompt = input_text.get("1.0", tk.END)
-    loop = asyncio.get_event_loop()
-    response = loop.run_until_complete(generate_response(instructions, prompt))
-    output_text.delete("1.0", tk.END)
-    output_text.insert(tk.END, response)
+    async def connect_to_openai(self):
+        async with websockets.connect(URL, extra_headers=headers, ping_interval=20, ping_timeout=10) as ws:
+            self.ws = ws
+            logging.info("Connected to server.")
 
-# GUI setup
-root = tk.Tk()
-root.title("OpenAI GUI")
+            await ws.send(json.dumps({
+                "event_id": "event_123",
+                "type": "session.update",
+                "session": {
+                    "modalities": ["text", "audio"],
+                    "instructions": """Jsi zkušený učitel autoškoly, který dokonale ovládá česká dopravní pravidla a zákony. Odpovídáš pouze na otázky, které ti žák klade, a soustředíš se na to, aby byly tvoje odpovědi vždy přesné a stručné. Vždy používáš aktuální česká dopravní pravidla. Pokud je třeba, vysvětluješ situace na konkrétních příkladech z reálného provozu. Nezabýváš se informacemi, které nejsou relevantní k otázce žáka.""",
+                    "voice": "alloy",
+                    "input_audio_format": "pcm16",
+                    "output_audio_format": "pcm16",
+                    "input_audio_transcription": {
+                        "model": "whisper-1"
+                    },
+                    "tool_choice": "auto",
+                    "temperature": 0.8,
+                }
+            }))
 
-# Input Text Field
-input_label = tk.Label(root, text="Vstup:")
-input_label.pack()
+            await self.process_audio()
 
-input_text = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=100, height=10)
-input_text.pack()
+    def run(self):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.loop.create_task(self.connect_to_openai())
+        threading.Thread(target=self.loop.run_forever, daemon=True).start()
 
-# Record Audio Button
-record_button = tk.Button(root, text="Nahrát zvuk", command=start_audio_recording)
-record_button.pack()
+    def on_closing(self):
+        self.should_stop = True
+        self.is_recording = False
+        if self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        self.master.quit()
 
-# Generate Message Button
-generate_button = tk.Button(root, text="Generuj zprávu", command=generate_message)
-generate_button.pack()
+if __name__ == "__main__":
+    # Args parser
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("--debug", action="store_true")
+    args = argparser.parse_args()
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
 
-# Output Text Field
-output_label = tk.Label(root, text="Výstup:")
-output_label.pack()
-
-output_text = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=100, height=40)
-output_text.pack()
-
-# Start the Tkinter event loop
-root.mainloop()
+    root = tk.Tk()
+    root.geometry("400x200")
+    app = AudioChatApp(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    app.run()
+    root.mainloop()

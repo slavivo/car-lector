@@ -2,9 +2,10 @@
 
 ## Popis projektu
 
-Tento prototyp používá OpenAI API pro vytvoření virtuálního učitel autoškoly. Využíváný model je klasický openAI model. Tento model byl naučený na datech z celého internetu, které také obsahovali české dopravní pravidla, a proto je model schopný korektně odpovídat na dotazy.
+Tento prototyp používá OpenAI Realtime API pro vytvoření virtuálního učitel autoškoly. Toto API využívá několik openAI modelů pro přepsání hlasu uživatele, generování nové odpovědi a vytvoření hlasu pro tuto odpověď. 
+Model použitý pro generování odpovědi je klasický openAI model gpt-4o. Tento model byl naučený na datech z celého internetu, které také obsahovali české dopravní pravidla, a proto je model schopný korektně odpovídat na dotazy.
 
-Aplikace umožňuje uživateli nahrávat dotazy prostřednictvím textu nebo zvuku (předpokládá se český jazyk, pohlaví či věk nemá vliv). Zvuk je pomocí openAI Whisper modelu přepsán na text. Aplikace poté umožňuje poskytnutí textové odpovědi od virtuálního učitele, která je zobrazena v grafickém uživatelském rozhraní (GUI). GUI je primitivní a slouží pouze k demonstraci funkcionality aplikace. 
+Aplikace umožňuje uživateli konverzaci s virtuálním asistentem. Stačí pouze kliknout na tlačítko "Začít nahrávat" pro zahájení nahrávání hlasu uživatele a poté "Přestat nahrávat" pro zastavení nahrání. Následně openAI zpracuje odpověď, která se poté přehraje. Toto lze opakovat jako v konverzaci.
 
 ## Postup instalace
 
@@ -17,13 +18,13 @@ Buďto stáhněte zip soubor repozitáře a rozbalte ho.
 Nebo přes příkazovou řádku:
 ```bash
 git clone https://github.com/slavivo/car-lector.git
-cd autoskola-assistant
+cd car-lector
 ```
 
 2. Nainstalujte požadované závislosti:
 
 ```bash
-pip install openai pyaudio tenacity
+pip install websockets pyaudio
 ```
 
 Pokud nastane chyba při instalaci knihovny pyaudio, zkuste nainstalovat balíček portaudio pomocí následujícího příkazu:
@@ -38,7 +39,7 @@ brew install portaudio
 ```
 
 3. Updatujte konfigurační soubor config.ini:
-V souboru config.ini upravte hodnoty OPENAI_KEY z YOUR_OPENAI_KEY na váš openAI API klíč. Případně je i možnost změnit GPT_MODEL na jiný model, který je podporován openAI, ale není to nutné.
+V souboru config.ini upravte hodnoty OPENAI_KEY z YOUR_OPENAI_KEY na váš openAI API klíč. 
 
 4. Spusťte aplikaci:
 
