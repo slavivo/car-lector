@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 config = configparser.ConfigParser()
 config.read("config.ini")
 OPENAI_KEY = config["DEFAULT"]["OPENAI_KEY"]
-GPT_MODEL = config["DEFAULT"]["GPT_MODEL"]
 URL = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
 
 headers = {
