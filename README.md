@@ -1,10 +1,8 @@
-# Učitel autoškoly - Asistent
+# Real-time konverzace
 
 ## Popis projektu
 
-Tento prototyp používá OpenAI Realtime API pro vytvoření virtuálního učitel autoškoly. Toto API využívá několik openAI modelů pro přepsání hlasu uživatele, generování nové odpovědi a vytvoření hlasu pro tuto odpověď. 
-Model použitý pro generování odpovědi je klasický openAI model gpt-4o. Tento model byl naučený na datech z celého internetu, které také obsahovali české dopravní pravidla, a proto je model schopný korektně odpovídat na dotazy.
-
+Tento prototyp používá OpenAI Realtime API pro vytvoření virtuálního učitele/asistenta.
 Aplikace umožňuje uživateli konverzaci s virtuálním asistentem. Stačí pouze kliknout na tlačítko "Začít nahrávat" pro zahájení nahrávání hlasu uživatele a poté "Přestat nahrávat" pro zastavení nahrání. Následně openAI zpracuje odpověď, která se poté přehraje. Toto lze opakovat jako v konverzaci.
 
 ## Postup instalace
@@ -24,7 +22,7 @@ cd car-lector
 2. Nainstalujte požadované závislosti:
 
 ```bash
-pip install websockets pyaudio
+pip install websockets pyaudio pydub pynput
 ```
 
 Pokud nastane chyba při instalaci knihovny pyaudio, zkuste nainstalovat balíček portaudio pomocí následujícího příkazu:
@@ -38,13 +36,22 @@ Apple:
 brew install portaudio
 ```
 
-3. Updatujte konfigurační soubor config.ini:
-V souboru config.ini upravte hodnoty OPENAI_KEY z YOUR_OPENAI_KEY na váš openAI API klíč. 
+3. Ve složce src vytvořte soubor **config.ini**, který bude mít strukturu:
+
+```ini
+[DEFAULT]
+OPENAI_KEY = <YOUR_KEY>
+```
+Místo <YOUR_KEY> doplňte váš OpenAI klíč.
 
 4. Spusťte aplikaci:
 
-Pomocí příkazové řádky:
+Máte dvě možnosti aplikací:
+- main.py - Spustí aplikaci s grafickým rozhraním, kde se musí klikat na tlačítko pro zahájení a zastavení nahrávání.
+- realtime.py - Spustí aplikaci bez grafického rozhraní, kde se nahrávání spouští a zastavuje automaticky.
+
+Pomocí příkazové řádky (případně main.py nahraďte za realtime.py):
 ```bash
 python main.py
 ```
-Nebo rozkliknutím main.py souboru.
+Nebo rozkliknutím main.py souboru ve složce src.
