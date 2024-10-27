@@ -9,14 +9,17 @@ import argparse
 import tkinter as tk
 from tkinter import ttk
 import threading
+import os
 
 # Set-up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Read configuration
+current_dir = os.path.dirname(os.path.realpath(__file__))
+config_path = os.path.join(current_dir, "config.ini")
 config = configparser.ConfigParser()
-config.read("config.ini")
+config.read(config_path)
 OPENAI_KEY = config["DEFAULT"]["OPENAI_KEY"]
 URL = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
 
