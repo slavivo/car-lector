@@ -22,7 +22,7 @@ cd car-lector
 2. Nainstalujte požadované závislosti:
 
 ```bash
-pip install websockets pyaudio pydub pynput
+pip install PyAudio==0.2.14 pydub==0.25.1 pynput==1.7.7 websockets==12.0
 ```
 
 Pokud nastane chyba při instalaci knihovny pyaudio, zkuste nainstalovat balíček portaudio pomocí následujícího příkazu:
